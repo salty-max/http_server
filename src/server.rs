@@ -1,8 +1,10 @@
 use ansi_term::Colour;
 use std::net::TcpListener;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::convert::{TryFrom, TryInto};
 use crate::http::Request;
+use crate::http::response::Response;
+use crate::http::status_code::StatusCode;
 
 pub struct Server {
 	address: String,
@@ -25,12 +27,21 @@ impl Server {
 					match stream.read(&mut buffer) {
 						Ok(_) => {
 							println!("Received a request : {}", Colour::Green.paint(String::from_utf8_lossy(&buffer)));
-							match Request::try_from(&buffer[..]) {
+							let response = match Request::try_from(&buffer[..]) {
 								Ok(request) => {
 									dbg!(request);
+									Response::new(StatusCode::Ok, Some(String::from("<h1>It Works!</h1>")))
 								}
-								Err(e) => println!("Failed to parse request: {}", Colour::Red.paint(e.to_string()))
+								Err(e) => {
+									println!("Failed to parse request: {}", Colour::Red.paint(e.to_string()));
+									Response::new(StatusCode::BadRequest, None)
+								}
+							};
+
+							if let Err(e) = response.send(&mut stream) {
+								println!("Failed to send response: {}", Colour::Red.paint(e.to_string()));
 							}
+
 							let res: &Result<Request, _> = &buffer[..].try_into();
 						}
 						Err(e) => println!("Failed to read from connection: {}", Colour::Red.paint(e.to_string()))
