@@ -2,9 +2,20 @@ use ansi_term::Colour;
 use std::net::TcpListener;
 use std::io::{Read, Write};
 use std::convert::{TryFrom, TryInto};
-use crate::http::Request;
-use crate::http::response::Response;
-use crate::http::status_code::StatusCode;
+use crate::http::{
+	request::{Request, ParseError},
+	response::Response,
+	status_code::StatusCode
+};
+
+pub trait Handler {
+	fn handle_request(&mut self, request: &Request) -> Response;
+	
+	fn handle_bad_request(&mut self, e: &ParseError) -> Response {
+		println!("Failed to parse request: {}", Colour::Red.paint(e.to_string()));
+		Response::new(StatusCode::BadRequest, None)
+	}
+}
 
 pub struct Server {
 	address: String,
@@ -15,7 +26,7 @@ impl Server {
 		Self { address }
 	}
 
-	pub fn run(self) {
+	pub fn run(self, mut handler: impl Handler) {
 		println!("Listening on {}", Colour::Blue.bold().paint(&self.address));
 
 		let listener = TcpListener::bind(&self.address).unwrap();
@@ -29,12 +40,10 @@ impl Server {
 							println!("Received a request : {}", Colour::Green.paint(String::from_utf8_lossy(&buffer)));
 							let response = match Request::try_from(&buffer[..]) {
 								Ok(request) => {
-									dbg!(request);
-									Response::new(StatusCode::Ok, Some(String::from("<h1>It Works!</h1>")))
+									handler.handle_request(&request)
 								}
 								Err(e) => {
-									println!("Failed to parse request: {}", Colour::Red.paint(e.to_string()));
-									Response::new(StatusCode::BadRequest, None)
+									handler.handle_bad_request(&e)
 								}
 							};
 
